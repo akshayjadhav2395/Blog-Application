@@ -1,10 +1,15 @@
 package com.aj.blog.controllers;
 
+import java.io.IOException;
+import java.io.InputStream;
 import java.util.List;
 
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.HttpStatus;import org.springframework.http.HttpStatusCode;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.util.StreamUtils;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -14,11 +19,16 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
+import com.aj.blog.config.AppConstants;
 import com.aj.blog.payload.ApiResponse;
 import com.aj.blog.payload.PostDto;
 import com.aj.blog.payload.PostResponse;
+import com.aj.blog.services.FileUploadService;
 import com.aj.blog.services.PostService;
+
+import jakarta.servlet.http.HttpServletResponse;
 
 @RestController
 @RequestMapping("/api/")
@@ -26,6 +36,12 @@ public class PostController {
 	
 	@Autowired
 	private PostService postService;
+	
+	@Autowired
+	private FileUploadService fileUploadService;
+	
+	@Value("${project.image}")
+	private String path;
 
 	@PostMapping("/user/{uId}/category/{categoryId}/posts")
 	public ResponseEntity<PostDto> createPost(
@@ -48,10 +64,10 @@ public class PostController {
 	
 	@GetMapping("/posts")
 	public ResponseEntity<PostResponse> getAllPosts(
-			@RequestParam(value = "pageNumber", defaultValue = "0", required = false) int pageNumber,
-			@RequestParam(value = "pageSize", defaultValue = "5", required = false) int pageSize,
-			@RequestParam(value = "sortBy", defaultValue = "postId", required = false) String sortBy,
-			@RequestParam(value = "sortDir", defaultValue = "asc", required = false) String sortDir)
+			@RequestParam(value = "pageNumber", defaultValue = AppConstants.PAGE_NUMBER, required = false) int pageNumber,
+			@RequestParam(value = "pageSize", defaultValue = AppConstants.PAGE_SIZE, required = false) int pageSize,
+			@RequestParam(value = "sortBy", defaultValue = AppConstants.SORT_BY, required = false) String sortBy,
+			@RequestParam(value = "sortDir", defaultValue = AppConstants.SORT_DIR, required = false) String sortDir)
 	{
 		PostResponse postResponse = this.postService.getAllPosts(pageNumber,pageSize, sortBy, sortDir);
 		
@@ -105,6 +121,35 @@ public class PostController {
 		
 		return new ResponseEntity<List<PostDto>> (searchPost, HttpStatus.OK);
 	}
+	
+	//upload image
+	
+	@PostMapping("/post/image/upload/{postId}")
+	public ResponseEntity<PostDto> uploadImage(
+			@RequestParam("image") MultipartFile image,
+			@PathVariable int postId) throws IOException
+	{
+		PostDto postDto = this.postService.getPostByPostId(postId);
+
+		String fileName = this.fileUploadService.uploadImage(path, image);
+		
+		postDto.setImageName(fileName);
+		
+		PostDto updatedPost = this.postService.updatePost(postDto, postId);
+		
+		return new ResponseEntity<PostDto> (updatedPost, HttpStatus.OK);
+	}
+	
+	//download image
+	@GetMapping(value = "/post/image/{imageName}", produces = MediaType.IMAGE_JPEG_VALUE)
+	public void downloadImage(@PathVariable("imageName") String imageName, HttpServletResponse response) throws IOException
+	{
+		InputStream resource=this.fileUploadService.getResource(path, imageName);
+		response.setContentType(MediaType.IMAGE_JPEG_VALUE);
+		StreamUtils.copy(resource, response.getOutputStream());
+	}
+	
+	
 	
 	
 }
